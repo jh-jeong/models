@@ -177,11 +177,11 @@ def evaluate(hps):
 
         # Write a summary
         precision_summ = tf.Summary()
-        precision_summ.value.add(tag='Precision', simple_value=precision)
+        precision_summ.value.add(tag='precision', simple_value=precision)
         summary_writer.add_summary(precision_summ, train_step)
 
         best_precision_summ = tf.Summary()
-        best_precision_summ.value.add(tag='Best Precision', simple_value=best_precision)
+        best_precision_summ.value.add(tag='best_precision', simple_value=best_precision)
         summary_writer.add_summary(best_precision_summ, train_step)
 
         summary_writer.add_summary(summaries, train_step)
