@@ -138,15 +138,20 @@ class ResNet(object):
 
         trainable_variables = tf.trainable_variables()
         grads = tf.gradients(self.cost, trainable_variables)
+        grads_and_vars = zip(grads, trainable_variables)
+
+        for grad, var in grads_and_vars:
+            if grad is not None:
+                tf.summary.histogram(var.op.name + "/gradients", grad)
 
         if self.hps.optimizer == 'sgd':
             optimizer = tf.train.GradientDescentOptimizer(self.lrn_rate)
         elif self.hps.optimizer == 'mom':
             optimizer = tf.train.MomentumOptimizer(self.lrn_rate, 0.9)
 
-        apply_op = optimizer.apply_gradients(
-            zip(grads, trainable_variables),
-            global_step=self.global_step, name='train_step')
+        apply_op = optimizer.apply_gradients(grads_and_vars,
+                                             global_step=self.global_step,
+                                             name='train_step')
 
         train_ops = [apply_op] + self._extra_train_ops
         self.train_op = tf.group(*train_ops)
