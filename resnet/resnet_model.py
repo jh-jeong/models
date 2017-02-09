@@ -85,6 +85,7 @@ class ResNet(object):
         else:
             res_func = self._residual
             filters = [16, 16, 32, 64]
+
             # Uncomment the following codes to use w28-10 wide residual network.
             # It is more memory efficient than very deep residual network and has
             # comparably good performance.
@@ -188,8 +189,9 @@ class ResNet(object):
                     'moving_variance', params_shape, tf.float32,
                     initializer=tf.constant_initializer(1.0, tf.float32),
                     trainable=False)
-                tf.histogram_summary(mean.op.name, mean)
-                tf.histogram_summary(variance.op.name, variance)
+                tf.summary.histogram(mean.op.name, mean)
+                tf.summary.histogram(variance.op.name, variance)
+
             # elipson used to be 1e-5. Maybe 0.001 solves NaN problem in deeper net.
             y = tf.nn.batch_normalization(
                 x, mean, variance, beta, gamma, 0.001)
@@ -211,6 +213,8 @@ class ResNet(object):
                 x = self._relu(x, self.hps.relu_leakiness)
 
         with tf.variable_scope('sub1'):
+            # The size of feature map is halved when stride=[1, 2, 2, 1]
+            # Also, The number of filters are changed as well
             x = self._conv('conv1', x, 3, in_filter, out_filter, stride)
 
         with tf.variable_scope('sub2'):
@@ -220,6 +224,8 @@ class ResNet(object):
 
         with tf.variable_scope('sub_add'):
             if in_filter != out_filter:
+                # feature map halving is done simultaneously
+                # with filter augmentation, so we can do this
                 orig_x = tf.nn.avg_pool(orig_x, stride, stride, 'VALID')
                 orig_x = tf.pad(
                     orig_x, [[0, 0], [0, 0], [0, 0],
@@ -270,7 +276,7 @@ class ResNet(object):
         for var in tf.trainable_variables():
             if var.op.name.find(r'DW') > 0:
                 costs.append(tf.nn.l2_loss(var))
-                # tf.histogram_summary(var.op.name, var)
+                tf.summary.histogram(var.op.name, var)
 
         return tf.multiply(self.hps.weight_decay_rate, tf.add_n(costs))
 
