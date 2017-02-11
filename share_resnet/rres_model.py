@@ -75,9 +75,11 @@ class RResNet(object):
         activate_before_residual = [True, False, False]
         if self.hps.use_bottleneck:
             res_func = self._bottleneck_residual
+            res_func_share = self._bottlenet_residual_share
             filters = [16, 64, 128, 256]
         else:
             res_func = self._residual
+            res_func_share = self._residual_share
             filters = [16, 16, 32, 64]
 
             # Uncomment the following codes to use w28-10 wide residual network.
@@ -94,7 +96,7 @@ class RResNet(object):
             share = self._knl_share(filters[1])
         for i in six.moves.range(1, self.hps.num_residual_units):
             with tf.variable_scope('unit_1_%d' % i):
-                x = res_func(x, filters[1], filters[1], self._stride_arr(1), False, share=share)
+                x = res_func_share(x, share)
 
         with tf.variable_scope('unit_2_0'):
             x = res_func(x, filters[1], filters[2], self._stride_arr(strides[1]),
@@ -103,7 +105,7 @@ class RResNet(object):
             share = self._knl_share(filters[2])
         for i in six.moves.range(1, self.hps.num_residual_units):
             with tf.variable_scope('unit_2_%d' % i):
-                x = res_func(x, filters[2], filters[2], self._stride_arr(1), False, share=share)
+                x = res_func_share(x, share)
 
         with tf.variable_scope('unit_3_0'):
             x = res_func(x, filters[2], filters[3], self._stride_arr(strides[2]),
@@ -112,7 +114,7 @@ class RResNet(object):
             share = self._knl_share(filters[3])
         for i in six.moves.range(1, self.hps.num_residual_units):
             with tf.variable_scope('unit_3_%d' % i):
-                x = res_func(x, filters[3], filters[3], self._stride_arr(1), False, share=share)
+                x = res_func_share(x, share)
 
         with tf.variable_scope('unit_last'):
             x = self._batch_norm('final_bn', x)
@@ -204,7 +206,7 @@ class RResNet(object):
             return y
 
     def _residual(self, x, in_filter, out_filter, stride,
-                  activate_before_residual=False, share=None):
+                  activate_before_residual=False):
         """Residual unit with 2 sub layers."""
         if activate_before_residual:
             with tf.variable_scope('shared_activation'):
@@ -217,24 +219,15 @@ class RResNet(object):
                 x = self._batch_norm('init_bn', x)
                 x = self._relu(x, self.hps.relu_leakiness)
 
-        if share is not None:
-            with tf.name_scope('sub1'):
-                x = self._conv_share('conv1', x, share[0], stride)
+        with tf.variable_scope('sub1'):
+            # The size of feature map is halved when stride=[1, 2, 2, 1]
+            # Also, The number of filters are changed as well
+            x = self._conv('conv1', x, 3, in_filter, out_filter, stride)
 
-            with tf.name_scope('sub2'):
-                x = self._batch_norm('bn2', x)
-                x = self._relu(x, self.hps.relu_leakiness)
-                x = self._conv_share('conv2', x, share[1], [1, 1, 1, 1])
-        else:
-            with tf.variable_scope('sub1'):
-                # The size of feature map is halved when stride=[1, 2, 2, 1]
-                # Also, The number of filters are changed as well
-                x = self._conv('conv1', x, 3, in_filter, out_filter, stride)
-
-            with tf.variable_scope('sub2'):
-                x = self._batch_norm('bn2', x)
-                x = self._relu(x, self.hps.relu_leakiness)
-                x = self._conv('conv2', x, 3, out_filter, out_filter, [1, 1, 1, 1])
+        with tf.variable_scope('sub2'):
+            x = self._batch_norm('bn2', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+            x = self._conv('conv2', x, 3, out_filter, out_filter, [1, 1, 1, 1])
 
         with tf.variable_scope('sub_add'):
             if in_filter != out_filter:
@@ -250,7 +243,7 @@ class RResNet(object):
         return x
 
     def _bottleneck_residual(self, x, in_filter, out_filter, stride,
-                             activate_before_residual=False, share=None):
+                             activate_before_residual=False):
         """Bottleneck residual unit with 3 sub layers."""
         if activate_before_residual:
             with tf.variable_scope('common_bn_relu'):
@@ -263,36 +256,67 @@ class RResNet(object):
                 x = self._batch_norm('init_bn', x)
                 x = self._relu(x, self.hps.relu_leakiness)
 
-        if share is not None:
-            with tf.name_scope('sub1'):
-                x = self._conv_share('conv1', x, share[0], stride)
+        with tf.variable_scope('sub1'):
+            x = self._conv('conv1', x, 1, in_filter, out_filter / 4, stride)
 
-            with tf.name_scope('sub2'):
-                x = self._batch_norm('bn2', x)
-                x = self._relu(x, self.hps.relu_leakiness)
-                x = self._conv_share('conv2', x, share[1], [1, 1, 1, 1])
+        with tf.variable_scope('sub2'):
+            x = self._batch_norm('bn2', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+            x = self._conv('conv2', x, 3, out_filter / 4, out_filter / 4, [1, 1, 1, 1])
 
-            with tf.name_scope('sub3'):
-                x = self._batch_norm('bn3', x)
-                x = self._relu(x, self.hps.relu_leakiness)
-                x = self._conv_share('conv3', x, share[2], [1, 1, 1, 1])
-        else:
-            with tf.variable_scope('sub1'):
-                x = self._conv('conv1', x, 1, in_filter, out_filter / 4, stride)
-
-            with tf.variable_scope('sub2'):
-                x = self._batch_norm('bn2', x)
-                x = self._relu(x, self.hps.relu_leakiness)
-                x = self._conv('conv2', x, 3, out_filter / 4, out_filter / 4, [1, 1, 1, 1])
-
-            with tf.variable_scope('sub3'):
-                x = self._batch_norm('bn3', x)
-                x = self._relu(x, self.hps.relu_leakiness)
-                x = self._conv('conv3', x, 1, out_filter / 4, out_filter, [1, 1, 1, 1])
+        with tf.variable_scope('sub3'):
+            x = self._batch_norm('bn3', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+            x = self._conv('conv3', x, 1, out_filter / 4, out_filter, [1, 1, 1, 1])
 
         with tf.variable_scope('sub_add'):
             if in_filter != out_filter:
                 orig_x = self._conv('project', orig_x, 1, in_filter, out_filter, stride)
+            x += orig_x
+
+        tf.logging.info('image after unit %s', x.get_shape())
+        return x
+
+    def _residual_share(self, x, kernels):
+        with tf.variable_scope('residual_only_activation'):
+            orig_x = x
+            x = self._batch_norm('init_bn', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+
+        with tf.name_scope('sub1'):
+            x = self._conv_share('conv1', x, kernels[0], [1, 1, 1, 1])
+
+        with tf.name_scope('sub2'):
+            x = self._batch_norm('bn2', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+            x = self._conv_share('conv2', x, kernels[1], [1, 1, 1, 1])
+
+        with tf.variable_scope('sub_add'):
+            x += orig_x
+
+        tf.logging.info('image after unit %s', x.get_shape())
+        return x
+
+    def _bottlenet_residual_share(self, x, kernels):
+        with tf.variable_scope('residual_bn_relu'):
+            orig_x = x
+            x = self._batch_norm('init_bn', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+
+        with tf.name_scope('sub1'):
+            x = self._conv_share('conv1', x, kernels[0], [1, 1, 1, 1])
+
+        with tf.name_scope('sub2'):
+            x = self._batch_norm('bn2', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+            x = self._conv_share('conv2', x, kernels[1], [1, 1, 1, 1])
+
+        with tf.name_scope('sub3'):
+            x = self._batch_norm('bn3', x)
+            x = self._relu(x, self.hps.relu_leakiness)
+            x = self._conv_share('conv3', x, kernels[2], [1, 1, 1, 1])
+
+        with tf.variable_scope('sub_add'):
             x += orig_x
 
         tf.logging.info('image after unit %s', x.get_shape())
