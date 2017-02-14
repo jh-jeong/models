@@ -29,23 +29,16 @@ tf.app.flags.DEFINE_string('dataset', 'cifar10',
                            'cifar10 or cifar100.')
 tf.app.flags.DEFINE_string('mode', 'train',
                            'train or eval.')
-tf.app.flags.DEFINE_string('train_data_path', '',
+tf.app.flags.DEFINE_string('data_path', '',
                            'Filepattern for training data.')
-tf.app.flags.DEFINE_string('eval_data_path', '',
-                           'Filepattern for eval data')
 tf.app.flags.DEFINE_integer('image_size', 32,
                             'Image side length.')
-tf.app.flags.DEFINE_string('train_dir', 'result/rres32_base/train',
-                           'Directory to keep training outputs.')
-tf.app.flags.DEFINE_string('eval_dir', 'result/rres32_base/eval',
-                           'Directory to keep eval outputs.')
 tf.app.flags.DEFINE_integer('eval_batch_count', 50,
                             'Number of batches to eval.')
 tf.app.flags.DEFINE_bool('eval_once', False,
                          'Whether evaluate the model only once.')
-tf.app.flags.DEFINE_string('log_root', 'result/rres32_base',
-                           'Directory to keep the checkpoints. Should be a '
-                           'parent directory of FLAGS.train_dir/eval_dir.')
+tf.app.flags.DEFINE_string('log_root', '',
+                           'Directory to keep the checkpoints.')
 tf.app.flags.DEFINE_integer('num_gpus', 1,
                             'Number of gpus used for training. (0 or 1)')
 
@@ -54,7 +47,7 @@ def train(hps):
     """Training loop"""
 
     # Build input data with batches
-    images, labels = cifar_input.build_input(FLAGS.dataset, FLAGS.train_data_path,
+    images, labels = cifar_input.build_input(FLAGS.dataset, FLAGS.data_path,
                                              hps.batch_size, FLAGS.mode)
 
     # Load a model and assign it to the default graph
@@ -79,7 +72,7 @@ def train(hps):
     # Define some hooks
     summary_hook = tf.train.SummarySaverHook(
         save_steps=100,
-        output_dir=FLAGS.train_dir,
+        output_dir=FLAGS.log_root + '/train',
         summary_op=tf.summary.merge([model.summaries,
                                      tf.summary.scalar('precision', precision)])
     )
@@ -129,7 +122,7 @@ def evaluate(hps):
     """Evaluation loop"""
 
     # Build input data with batches
-    images, labels = cifar_input.build_input(FLAGS.dataset, FLAGS.eval_data_path,
+    images, labels = cifar_input.build_input(FLAGS.dataset, FLAGS.data_path,
                                              hps.batch_size, FLAGS.mode)
 
     # Load a model and assign it to the default graph
@@ -137,7 +130,7 @@ def evaluate(hps):
     model.build_graph()
 
     saver = tf.train.Saver()
-    summary_writer = tf.summary.FileWriter(FLAGS.eval_dir)
+    summary_writer = tf.summary.FileWriter(FLAGS.log_root + "/eval")
 
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     tf.train.start_queue_runners(sess)
