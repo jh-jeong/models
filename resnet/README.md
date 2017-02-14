@@ -26,7 +26,7 @@ https://arxiv.org/pdf/1605.07146v1.pdf
 * Pad to 36x36 and random crop. Horizontal flip. Per-image whitenting. 
 * Momentum optimizer 0.9.
 * Learning rate schedule: 0.1 (40k), 0.01 (60k), 0.001 (>60k).
-* L2 weight decay: 0.002.
+* L2 weight decay: 0.0002.
 * Batch size: 128. (28-10 wide and 1001 layer bottleneck use 64)
 
 <b>Results:</b>
